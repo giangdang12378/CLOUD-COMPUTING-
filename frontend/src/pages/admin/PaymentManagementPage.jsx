@@ -210,7 +210,8 @@ const PaymentManagementPage = () => {
       if (data.success) {
         if (format === "csv") {
           // Convert JSON to CSV
-          const csvData = data.data;
+          const csvData = data.payments || data.data || [];
+          if (!csvData.length) { toast.error("Không có dữ liệu để xuất"); return; }
           const headers = Object.keys(csvData[0]);
           const csvContent = [
             headers.join(","),
@@ -368,7 +369,8 @@ const PaymentManagementPage = () => {
       debit_card: "Thẻ ghi nợ",
       e_wallet: "Ví điện tử",
       bank_transfer: "Chuyển khoản",
-      cod: "Thanh toán khi nhận hàng",
+      cod: "Tiền mặt (COD)",
+      payos: "Chuyển khoản (PayOS)",
     };
     return labels[method] || method;
   };
@@ -525,13 +527,11 @@ const PaymentManagementPage = () => {
                 <LineChart data={paymentStats.dailyRevenue}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey="_id.day"
-                    tickFormatter={(value, index) => {
-                      const item = paymentStats.dailyRevenue[index];
-                      if (item) {
-                        return `${item._id.day}/${item._id.month}`;
-                      }
-                      return value;
+                    dataKey="date"
+                    tickFormatter={(value) => {
+                      if (!value) return value;
+                      const [, month, day] = value.split("-");
+                      return `${day}/${month}`;
                     }}
                   />
                   <YAxis
@@ -541,12 +541,10 @@ const PaymentManagementPage = () => {
                   />
                   <Tooltip
                     formatter={(value) => formatCurrency(value)}
-                    labelFormatter={(label, payload) => {
-                      if (payload && payload[0]) {
-                        const data = payload[0].payload;
-                        return `${data._id.day}/${data._id.month}/${data._id.year}`;
-                      }
-                      return label;
+                    labelFormatter={(label) => {
+                      if (!label) return label;
+                      const [year, month, day] = label.split("-");
+                      return `${day}/${month}/${year}`;
                     }}
                   />
                   <Line
@@ -571,8 +569,8 @@ const PaymentManagementPage = () => {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ _id, amount }) =>
-                      `${getPaymentMethodLabel(_id)}: ${formatCurrency(amount)}`
+                    label={({ method, percent }) =>
+                      `${getPaymentMethodLabel(method)} (${(percent*100).toFixed(0)}%)`
                     }
                     outerRadius={80}
                     fill="#8884d8"
@@ -715,7 +713,7 @@ const PaymentManagementPage = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {payments.map((payment, index) => (
                       <motion.tr
-                        key={payment._id}
+                        key={payment.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
@@ -726,15 +724,15 @@ const PaymentManagementPage = () => {
                             {payment.transactionId}
                           </div>
                           <div className="text-xs text-gray-500">
-                            Đơn hàng: {payment.orderId?.orderNumber || "N/A"}
+                            Đơn hàng: {payment.order?.orderNumber || "N/A"}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            {payment.userId?.name || "N/A"}
+                            {payment.user?.name || "N/A"}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {payment.userId?.email || "N/A"}
+                            {payment.user?.email || "N/A"}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -764,7 +762,7 @@ const PaymentManagementPage = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
                             <button
-                              onClick={() => fetchPaymentDetail(payment._id)}
+                              onClick={() => fetchPaymentDetail(payment.id)}
                               className="text-blue-600 hover:text-blue-700 p-1 rounded"
                               title="Xem chi tiết"
                             >
@@ -930,7 +928,7 @@ const PaymentManagementPage = () => {
                       <div className="flex justify-between">
                         <span className="text-gray-500">Mã đơn hàng:</span>
                         <span>
-                          {selectedPayment.orderId?.orderNumber || "N/A"}
+                          {selectedPayment.order?.orderNumber || "N/A"}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -988,11 +986,11 @@ const PaymentManagementPage = () => {
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-500">Tên:</span>
-                        <span>{selectedPayment.userId?.name || "N/A"}</span>
+                        <span>{selectedPayment.user?.name || "N/A"}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Email:</span>
-                        <span>{selectedPayment.userId?.email || "N/A"}</span>
+                        <span>{selectedPayment.user?.email || "N/A"}</span>
                       </div>
                       {selectedPayment.description && (
                         <div>

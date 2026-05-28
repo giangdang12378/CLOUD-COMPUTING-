@@ -27,7 +27,7 @@ const TenantManagementPage = () => {
             setShowLockModal(true);
         } else {
             // If locked, we want to unlock -> direct toggle
-            handleUnlock(tenant._id);
+            handleUnlock(tenant.id);
         }
     };
 
@@ -38,11 +38,12 @@ const TenantManagementPage = () => {
         }
 
         try {
-            await updateTenantStatus(selectedTenant._id, false, lockReason);
+            await updateTenantStatus(selectedTenant.id, false, lockReason);
             toast.success(`Đã khóa cửa hàng ${selectedTenant.name}`);
             setShowLockModal(false);
             setSelectedTenant(null);
             setLockReason("");
+            getTenants(1, searchTerm);
         } catch (error) {
             toast.error("Lỗi khi khóa cửa hàng");
         }
@@ -52,6 +53,7 @@ const TenantManagementPage = () => {
         try {
             await updateTenantStatus(id, true);
             toast.success("Đã mở khóa cửa hàng thành công");
+            getTenants(1, searchTerm);
         } catch (error) {
             toast.error("Lỗi khi mở khóa cửa hàng");
         }
@@ -101,7 +103,7 @@ const TenantManagementPage = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                                 {tenants.map((tenant) => (
-                                    <tr key={tenant._id} className="hover:bg-gray-50/50 transition-colors">
+                                    <tr key={tenant.id} className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 <div className="h-10 w-10 flex-shrink-0 rounded-lg bg-green-50 flex items-center justify-center">
@@ -109,7 +111,7 @@ const TenantManagementPage = () => {
                                                 </div>
                                                 <div className="ml-4">
                                                     <div className="text-sm font-medium text-gray-900">{tenant.name}</div>
-                                                    <div className="text-sm text-gray-500 font-mono text-[10px]">ID: {tenant._id}</div>
+                                                    <div className="text-sm text-gray-500 font-mono text-[10px]">ID: {tenant.id}</div>
                                                 </div>
                                             </div>
                                         </td>

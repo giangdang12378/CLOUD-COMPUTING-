@@ -16,7 +16,7 @@ const TABS = [
 const ProductManagementPage = () => {
   const { user } = useAuthStore();
   const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState({});
+  const [pagination, setPagination] = useState({ totalPages: 1, currentPage: 1, totalProducts: 0 });
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -119,10 +119,20 @@ const ProductManagementPage = () => {
 
   // Xóa sản phẩm (chuyển status)
   const handleDelete = async () => {
+    console.log("DELETE CLICKED");
+    console.log("productToDelete =", productToDelete);
+
     if (!productToDelete) return;
 
     try {
-      const response = await fetch(`${API_URL}/${productToDelete._id}`, { method: "DELETE", credentials: "include" });
+      console.log("DELETE URL =", `${API_URL}/${productToDelete._id}`);
+
+      const response = await fetch(`${API_URL}/${productToDelete._id}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+
+      console.log("DELETE RESPONSE =", response);
       if (!response.ok) {
         const errorData = await response.json();
         alert(errorData.message || "Không có quyền thực hiện hành động này");
@@ -154,7 +164,7 @@ const ProductManagementPage = () => {
     <>
       <AdminHeader />
       <div className="p-2 md:p-8 w-full max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-white">Quản lý sản phẩm</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Quản lý sản phẩm</h1>
 
         <div className="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
           <div className="flex gap-2 mb-2 md:mb-0">

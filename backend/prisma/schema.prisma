@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?  @unique
+  email     String?
+  isActive   Boolean  @default(true)
+  lockReason String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users     User[]
+  products  Product[]
+  orders    Order[]
+  payments  Payment[]
+  discounts Discount[]
+}
+
+
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  productName String
+  price       Decimal
+  description String?
+  image       String?
+  inventory   Int      @default(0)
+  category    String?
+  status      String   @default("available")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+
+  @@index([tenantId])
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  tenantId       String
+  orderNumber    String      @unique
+  customerInfo   Json?
+  totalAmount    Decimal
+  shippingFee    Decimal     @default(0)
+  discountAmount Decimal     @default(0)
+  finalAmount    Decimal
+  status         String      @default("pending")
+  paymentStatus  String      @default("pending")
+  paymentMethod  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+  payments       Payment[]
+
+  @@index([tenantId])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  tenantId      String
+  orderId       String?
+  amount        Decimal
+  paymentMethod String?
+  status        String   @default("pending")
+  transactionId String?
+  createdAt     DateTime @default(now())
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order         Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Discount {
+  id             String    @id @default(uuid())
+  tenantId       String
+  code           String    @unique
+  description    String?
+  discountType   String
+  discountValue  Decimal?
+  minOrderValue  Decimal?
+  startDate      DateTime?
+  endDate        DateTime?
+  usageLimit     Int?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+
+model User {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  name                  String
+  email                 String    @unique
+  password              String
+  role                  String    // super_admin, tenant_admin, tenant_staff
+  isVerified            Boolean   @default(false)
+  verificationToken     String?
+  resetPasswordToken    String?
+  resetPasswordExpires  DateTime?
+  lastLogin             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([email])
+}

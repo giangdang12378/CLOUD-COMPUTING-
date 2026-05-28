@@ -325,7 +325,9 @@ const POSPage = () => {
     }
 
     const selectedVariant = hasVariants ? getSelectedVariant(product, selectedColor, selectedSize) : null;
-    const finalPrice = product.price + (selectedVariant?.price || 0);
+    const finalPrice =
+      Number(product.price || 0) +
+      Number(selectedVariant?.price || 0);
     
     const cartItemId = hasVariants ? `${product._id}-${selectedColor}-${selectedSize}` : product._id;
 
@@ -469,7 +471,7 @@ const POSPage = () => {
           district: "Tại cửa hàng",
           ward: "Tại cửa hàng"
         },
-        paymentMethod: paymentMethod === 'cash' ? 'cod' : (paymentMethod === 'transfer' ? 'bank_transfer' : 'card'),
+        paymentMethod: paymentMethod === 'cash' ? 'cod' : (paymentMethod === 'transfer' ? 'payos' : 'card'),
         status: "delivered",
         paymentStatus: paymentMethod === 'cash' ? 'paid' : 'pending',
         isPos: true, 
@@ -494,8 +496,35 @@ const POSPage = () => {
         console.log("Order created successfully, response data:", data);
         toast.success("Đã tạo đơn hàng thành công!");
         
-        if (data.checkoutUrl && paymentMethod === 'transfer') {
+        if (data.checkoutUrl) {
           window.open(data.checkoutUrl, '_blank');
+          // Polling verify mỗi 5 giây
+          const orderId = data.order?.id;
+          const orderCode = data.orderCode;
+          if (orderId && orderCode) {
+            let pollCount = 0;
+            const maxPoll = 24; // tối đa 2 phút
+            const pollInterval = setInterval(async () => {
+              pollCount++;
+              try {
+                const vRes = await fetch(`${import.meta.env.VITE_API_URL || ""}/api/payments/verify-payos`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ orderCode, orderId }),
+                  credentials: 'include'
+                });
+                const vData = await vRes.json();
+                if (vData.status === 'PAID') {
+                  clearInterval(pollInterval);
+                  toast.success('Thanh toán thành công! Đơn hàng hoàn thành.');
+                } else if (vData.status === 'CANCELLED') {
+                  clearInterval(pollInterval);
+                  toast.error('Thanh toán bị hủy. Đơn hàng đã hủy.');
+                }
+              } catch (e) { /* ignore */ }
+              if (pollCount >= maxPoll) clearInterval(pollInterval);
+            }, 5000);
+          }
         }
 
         setCart([]);
@@ -686,7 +715,7 @@ const POSPage = () => {
                     <div className="aspect-[4/5] bg-gray-100 relative">
                       {product.image ? (
                         <img
-                          src={`${import.meta.env.VITE_API_URL || ""}${product.image}`}
+                          src={product.image && product.image.startsWith("http") ? product.image : `${import.meta.env.VITE_API_URL || ""}${product.image}`}
                           alt={product.productName}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
@@ -704,7 +733,7 @@ const POSPage = () => {
                     <div className="p-3">
                       <p className="font-bold text-gray-800 text-sm line-clamp-2 min-h-[2.5rem] mb-1">{product.productName}</p>
                       <div className="flex items-center justify-between">
-                        <p className="text-green-600 font-black text-base">{product.price.toLocaleString()}đ</p>
+                        <p className="text-green-600 font-black text-base">{Number(product.price).toLocaleString()}đ</p>
                         <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-bold">Tồn: {product.inventory}</span>
                       </div>
                     </div>
@@ -715,9 +744,9 @@ const POSPage = () => {
           </div>
 
           {/* Customer & Notes Section */}
-          <div className="mt-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex gap-6">
+          <div className="mt-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-100 flex gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <User className="w-4 h-4 text-green-600" />
                 <span className="text-xs font-black text-gray-400 uppercase tracking-wider">Thông tin khách hàng</span>
               </div>
@@ -727,7 +756,7 @@ const POSPage = () => {
                   <input 
                     type="text" 
                     placeholder="Tên khách hàng" 
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
+                    className="w-full pl-10 pr-4 py-1.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
                     value={customerInfo.fullName === "Khách lẻ" ? "" : customerInfo.fullName}
                     onChange={(e) => setCustomerInfo({...customerInfo, fullName: e.target.value})}
                   />
@@ -737,7 +766,7 @@ const POSPage = () => {
                   <input 
                     type="text" 
                     placeholder="Số điện thoại" 
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
+                    className="w-full pl-10 pr-4 py-1.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
                     value={customerInfo.phone}
                     onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value})}
                   />
@@ -747,7 +776,7 @@ const POSPage = () => {
                   <input 
                     type="email" 
                     placeholder="Email (nhận hóa đơn)" 
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
+                    className="w-full pl-10 pr-4 py-1.5 text-sm bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500 shadow-inner"
                     value={customerInfo.email}
                     onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
                   />
@@ -756,7 +785,7 @@ const POSPage = () => {
             </div>
             
             <div className="w-1/3">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <FileText className="w-4 h-4 text-green-600" />
                 <span className="text-xs font-black text-gray-400 uppercase tracking-wider">Ghi chú đơn hàng</span>
               </div>
@@ -774,7 +803,7 @@ const POSPage = () => {
         </div>
 
         {/* Right Side: Cart UI Redesign */}
-        <div className="w-[520px] bg-white shadow-2xl flex flex-col border-l border-gray-200 z-10">
+        <div className="w-[380px] min-w-[380px] bg-white shadow-2xl flex flex-col border-l border-gray-200 z-10">
           {/* Cart Header */}
           <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
             <div>
@@ -811,7 +840,7 @@ const POSPage = () => {
               cart.map((item) => (
                 <div key={item.cartItemId} className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100">
                   <div className="flex gap-3">
-                    <img src={item.image ? `${import.meta.env.VITE_API_URL || ""}${item.image}` : "/placeholder.png"} className="w-16 h-16 object-cover rounded-xl shadow-sm" alt="" />
+                    <img src={item.image ? (item.image.startsWith("http") ? item.image : `${import.meta.env.VITE_API_URL || ""}${item.image}`) : "/placeholder.png"} className="w-24 h-24 object-cover rounded-xl shadow-sm flex-shrink-0" alt="" />
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <div>
@@ -1033,7 +1062,7 @@ const POSPage = () => {
                 <div className="flex flex-col justify-center">
                   <div className="text-xs font-bold text-gray-400 uppercase mb-1 tracking-wider">Giá sản phẩm</div>
                   <div className="text-3xl font-black text-green-700 mb-2">
-                    {(selectedProduct.price + (getSelectedVariant(selectedProduct, selectedColor, selectedSize)?.price || 0)).toLocaleString()}đ
+                    {(Number(selectedProduct.price) + Number(getSelectedVariant(selectedProduct, selectedColor, selectedSize)?.price || 0)).toLocaleString()}đ
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg uppercase">Tồn kho: {selectedProduct.inventory}</span>

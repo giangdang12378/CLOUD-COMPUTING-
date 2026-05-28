@@ -112,7 +112,7 @@ const DiscountManagementPage = () => {
       discountType: discount.discountType,
       discountValue: discount.discountValue,
       minOrderValue: discount.minOrderValue,
-      maxDiscountAmount: discount.maxDiscountAmount !== null ? discount.maxDiscountAmount.toString() : "",
+      maxDiscountAmount: discount.maxDiscountAmount != null ? String(discount.maxDiscountAmount) : "",
       startDate: discount.startDate ? discount.startDate.split("T")[0] : new Date().toISOString().split("T")[0],
       endDate: discount.endDate ? discount.endDate.split("T")[0] : "",
       usageLimit: discount.usageLimit !== null ? discount.usageLimit.toString() : "",
@@ -229,7 +229,7 @@ const DiscountManagementPage = () => {
     <>
       <AdminHeader />
       <div className="p-2 md:p-8 w-full max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-white">Quản lý khuyến mãi</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Quản lý khuyến mãi</h1>
 
         <div className="mb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
           {/* Active Tab Filters */}

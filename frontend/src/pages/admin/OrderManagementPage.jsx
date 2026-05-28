@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import AdminHeader from "../../components/admin/AdminHeader";
 import OrderTable from "../../components/admin/OrderTable";
 import OrderDetailModal from "../../components/admin/OrderDetailModal";
-import { Package, DollarSign, TrendingUp, Clock, XCircle } from "lucide-react";
+import { Package, DollarSign, TrendingUp, XCircle } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 
 const API_URL = `${import.meta.env.VITE_API_URL || ""}/api/orders`;
@@ -159,7 +159,7 @@ const OrderManagementPage = () => {
     <>
       <AdminHeader />
       <div className="p-2 md:p-8 w-full max-w-7xl mx-auto pb-8">
-        <h1 className="text-2xl font-bold mb-6 text-white">Quản lý đơn hàng</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800">Quản lý đơn hàng</h1>
 
         {/* Statistics Cards - Hidden for Staff */}
         {!isStaff && (

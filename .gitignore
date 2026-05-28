@@ -1,4 +1,8 @@
 node_modules/
 .env
 .env.*
+uploads/backend/.env
+backend/cookies*.txt
+backend/*.backup
+backend/*.bak*
 uploads/

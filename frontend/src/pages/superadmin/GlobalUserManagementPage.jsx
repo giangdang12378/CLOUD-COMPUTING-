@@ -81,7 +81,7 @@ const GlobalUserManagementPage = () => {
     if (!selectedUser) return;
 
     try {
-      const response = await fetch(`/api/users/${selectedUser._id}`, {
+      const response = await fetch(`/api/users/${selectedUser.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lockReason }),
@@ -283,19 +283,19 @@ const GlobalUserManagementPage = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-900 text-sm">
                   {users.map(user => (
-                    <tr key={user._id} className="hover:bg-gray-50/50">
+                    <tr key={user.id} className="hover:bg-gray-50/50">
                       <td className="px-6 py-4">
                         <div className="font-semibold">{user.name || "N/A"}</div>
                         <div className="text-gray-500">{user.email}</div>
                       </td>
                       <td className="px-6 py-4">{getRoleBadge(user.role || 'user')}</td>
                       <td className="px-6 py-4 max-w-xs truncate text-gray-500">
-                        {!user.isActive ? (user.lockReason || "Không có lý do") : "---"}
+                        {!user.isVerified ? (user.lockReason || "Không có lý do") : "---"}
                       </td>
-                      <td className="px-6 py-4">{getStatusBadge(user.isActive)}</td>
+                      <td className="px-6 py-4">{getStatusBadge(user.isVerified)}</td>
                       <td className="px-6 py-4 text-gray-500">{formatDate(user.createdAt)}</td>
                       <td className="px-6 py-4 text-right">
-                        {user.isActive ? (
+                        {user.isVerified ? (
                           <button
                             onClick={() => handleOpenLockModal(user)}
                             className="text-red-600 hover:text-red-800 p-2"
@@ -305,7 +305,7 @@ const GlobalUserManagementPage = () => {
                           </button>
                         ) : (
                           <button
-                            onClick={() => restoreUser(user._id, user.name)}
+                            onClick={() => restoreUser(user.id, user.name)}
                             className="text-green-600 hover:text-green-800 p-2"
                             title="Mở khóa tài khoản"
                           >

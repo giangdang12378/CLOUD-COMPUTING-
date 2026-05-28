@@ -1,186 +1,70 @@
+import prisma from '../utils/prisma.js';
 
-
-  
-  import Product from '../models/product.model.js';
-
-// Giảm inventory khi có đơn hàng
 export const reduceInventory = async (productId, quantity) => {
-    try {
-        const product = await Product.findById(productId);
-
-        if (!product) {
-            throw new Error('Product not found');
-        }
-
-        if (product.status !== 'available') {
-            throw new Error('Product is not available for purchase');
-        }
-
-        if (product.inventory < quantity) {
-            throw new Error(`Not enough inventory. Available: ${product.inventory}, Requested: ${quantity}`);
-        }
-
-        // Trừ inventory
-        const newInventory = product.inventory - quantity;
-        const updateData = { inventory: newInventory };
-
-        // Nếu hết hàng, tự động chuyển status
-        if (newInventory === 0) {
-            updateData.status = 'out_of_stock';
-        }
-
-        
-        const updatedProduct = await Product.findByIdAndUpdate(
-            productId,
-            updateData,
-            { new: true }
-        );
-
-        return {
-            success: true,
-            product: updatedProduct,
-            message: `Inventory updated. Remaining: ${newInventory}`
-        };
-
-    } catch (error) {
-        return {
-            success: false,
-            message: error.message
-        };
-    }
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) return;
+  await prisma.product.update({ where: { id: productId }, data: { inventory: Math.max(0, product.inventory - quantity) } });
 };
 
-// Tăng inventory (khi hủy đơn hoặc hoàn hàng)
 export const increaseInventory = async (productId, quantity) => {
-    try {
-        const product = await Product.findById(productId);
-
-        if (!product) {
-            throw new Error('Product not found');
-        }
-
-        const newInventory = product.inventory + quantity;
-        const updateData = { inventory: newInventory };
-
-        // Nếu có hàng trở lại và đang out_of_stock, chuyển về available
-        if (product.status === 'out_of_stock' && newInventory > 0) {
-            updateData.status = 'available';
-        }
-
-        const updatedProduct = await Product.findByIdAndUpdate(
-            productId,
-            updateData,
-            { new: true }
-        );
-
-        return {
-            success: true,
-            product: updatedProduct,
-            message: `Inventory restored. Current: ${newInventory}`
-        };
-
-    } catch (error) {
-        return {
-            success: false,
-            message: error.message
-        };
-    }
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) return;
+  await prisma.product.update({ where: { id: productId }, data: { inventory: product.inventory + quantity } });
 };
 
-// Kiểm tra inventory trước khi đặt hàng
+export const getInventory = async (req, res) => {
+  try {
+    const products = await prisma.product.findMany({ where: { tenantId: req.tenantId }, select: { id: true, productName: true, inventory: true, status: true } });
+    res.json({ success: true, products });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+};
+
+export const updateInventory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { inventory } = req.body;
+    const product = await prisma.product.update({ where: { id }, data: { inventory: Number(inventory) } });
+    res.json({ success: true, product });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
+};
+
+export const getAdminStats = async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const [totalProducts, totalOrders, payments] = await Promise.all([
+      prisma.product.count({ where: { tenantId } }),
+      prisma.order.count({ where: { tenantId } }),
+      prisma.payment.findMany({ where: { tenantId, status: 'completed' }, select: { amount: true } })
+    ]);
+    const totalRevenue = payments.reduce((s, p) => s + Number(p.amount), 0);
+    res.json({ totalProducts, totalOrders, totalRevenue, totalCustomers: 0 });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+};
+
 export const checkInventory = async (req, res) => {
-    try {
-        const { productId, quantity } = req.body;
-
-        const product = await Product.findById(productId);
-
-        if (!product) {
-            return res.status(404).json({ message: 'Product not found' });
-        }
-
-        const available = product.status === 'available' && product.inventory >= quantity;
-
-        res.json({
-            available,
-            currentInventory: product.inventory,
-            requestedQuantity: quantity,
-            productStatus: product.status,
-            message: available
-                ? 'Product available for purchase'
-                : `Not enough inventory or product unavailable. Available: ${product.inventory}`
-        });
-
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+  try {
+    const { items } = req.body;
+    const results = [];
+    for (const item of items) {
+      const product = await prisma.product.findUnique({ where: { id: item.productId } });
+      results.push({ productId: item.productId, available: product ? product.inventory >= item.quantity : false, inventory: product?.inventory || 0 });
     }
+    res.json({ success: true, results });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-// API endpoint để process order (giảm inventory)
 export const processOrder = async (req, res) => {
-    try {
-        const { items } = req.body; // Array of {productId, quantity}
-        const results = [];
-        const errors = [];
-
-        // Process từng item trong đơn hàng
-        for (const item of items) {
-            const result = await reduceInventory(item.productId, item.quantity);
-
-            if (result.success) {
-                results.push({
-                    productId: item.productId,
-                    quantity: item.quantity,
-                    newInventory: result.product.inventory,
-                    status: result.product.status
-                });
-            } else {
-                errors.push({
-                    productId: item.productId,
-                    quantity: item.quantity,
-                    error: result.message
-                });
-            }
-        }
-
-        if (errors.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Some items could not be processed',
-                errors,
-                processed: results
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Order processed successfully',
-            updatedProducts: results
-        });
-
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const { items } = req.body;
+    for (const item of items) await reduceInventory(item.productId, item.quantity);
+    res.json({ success: true, message: 'Inventory updated' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-
-// API endpoint để cancel order (tăng inventory)
 export const cancelOrder = async (req, res) => {
-    try {
-        const { items } = req.body; // Array of {productId, quantity}
-        const results = [];
-
-        for (const item of items) {
-            const result = await increaseInventory(item.productId, item.quantity);
-            results.push(result);
-        }
-
-        res.json({
-            success: true,
-            message: 'Order cancelled, inventory restored',
-            updatedProducts: results
-        });
-
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const { items } = req.body;
+    for (const item of items) await increaseInventory(item.productId, item.quantity);
+    res.json({ success: true, message: 'Inventory restored' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };

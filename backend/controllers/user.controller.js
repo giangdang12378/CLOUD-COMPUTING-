@@ -1,135 +1,53 @@
-import User from '../models/user.model.js';
-import Order from '../models/order.model.js';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
-// Lấy danh sách toàn bộ người dùng (Super Admin)
 export const getGlobalUsers = async (req, res) => {
     try {
-        const {
-            page = 1,
-            limit = 10,
-            search = '',
-            role = 'all',
-            status = 'all',
-            sortBy = 'newest'
-        } = req.query;
-
+        const { page = 1, limit = 10, search = '', role = 'all', status = 'all', sortBy = 'newest' } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
         const skip = (pageNum - 1) * limitNum;
-
-        // Build filter
-        let filter = {};
-
-        // Search by name or email
-        if (search) {
-            filter.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } }
-            ];
-        }
-
-        // Role filter
-        if (role !== 'all') {
-            if (role === 'user') {
-                filter.$or = [{ role: 'user' }, { role: { $exists: false } }];
-            } else {
-                filter.role = role;
-            }
-        }
-
-        // Status filter
-        if (status === 'active') {
-            filter.isActive = { $ne: false };
-        } else if (status === 'inactive') {
-            filter.isActive = false;
-        }
-
-        // Sorting logic
-        let sortOption = { createdAt: -1 }; // default: newest
-        if (sortBy === 'oldest') sortOption = { createdAt: 1 };
-        else if (sortBy === 'name_asc') sortOption = { name: 1 };
-        else if (sortBy === 'name_desc') sortOption = { name: -1 };
-        else if (sortBy === 'email_asc') sortOption = { email: 1 };
-        else if (sortBy === 'email_desc') sortOption = { email: -1 };
-
-        const totalUsers = await User.countDocuments(filter);
-        const activeUsers = await User.countDocuments({ ...filter, isActive: { $ne: false } });
-        
-        // Fetch users
-        const users = await User.find(filter)
-            .select('-password')
-            .sort(sortOption)
-            .skip(skip)
-            .limit(limitNum);
-
-        const totalPages = Math.ceil(totalUsers / limitNum);
-
-        res.json({
-            success: true,
-            users,
-            pagination: {
-                page: pageNum,
-                limit: limitNum,
-                totalPages
-            },
-            stats: {
-                totalUsers,
-                activeUsers,
-                inactiveUsers: totalUsers - activeUsers
-            }
-        });
+        let where = {};
+        if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { email: { contains: search, mode: 'insensitive' } }];
+        if (role !== 'all') where.role = role;
+        if (status === 'active') where.isVerified = true;
+        else if (status === 'inactive') where.isVerified = false;
+        let orderBy = { createdAt: 'desc' };
+        if (sortBy === 'oldest') orderBy = { createdAt: 'asc' };
+        else if (sortBy === 'name_asc') orderBy = { name: 'asc' };
+        else if (sortBy === 'name_desc') orderBy = { name: 'desc' };
+        const [totalUsers, activeUsers, users] = await Promise.all([
+            prisma.user.count({ where }),
+            prisma.user.count({ where: { ...where, isVerified: true } }),
+            prisma.user.findMany({ where, orderBy, skip, take: limitNum, omit: { password: true } })
+        ]);
+        res.json({ success: true, users, pagination: { page: pageNum, limit: limitNum, totalPages: Math.ceil(totalUsers / limitNum) }, stats: { totalUsers, activeUsers, inactiveUsers: totalUsers - activeUsers } });
     } catch (error) {
         console.error('Error getting global users:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Không thể lấy danh sách người dùng',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// Vô hiệu hóa người dùng (Super Admin)
 export const deleteGlobalUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { lockReason } = req.body;
-        const user = await User.findById(id);
-        
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
-        }
-
-        if (user.role === 'super_admin') {
-            return res.status(403).json({ success: false, message: 'Không thể khóa tài khoản Super Admin khác' });
-        }
-
-        await User.findByIdAndUpdate(id, { 
-            isActive: false,
-            lockReason: lockReason || 'Vi phạm điều khoản dịch vụ'
-        });
-
-        res.json({ success: true, message: `Đã vô hiệu hóa tài khoản ${user.name || user.email}` });
+        const user = await prisma.user.findUnique({ where: { id } });
+        if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+        if (user.role === 'super_admin') return res.status(403).json({ success: false, message: 'Không thể khóa Super Admin' });
+        await prisma.user.update({ where: { id }, data: { isVerified: false } });
+        res.json({ success: true, message: "Đã vô hiệu hóa tài khoản" });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// Khôi phục người dùng (Super Admin)
 export const restoreGlobalUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const user = await User.findById(id);
-        
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
-        }
-
-        await User.findByIdAndUpdate(id, { 
-            isActive: true,
-            lockReason: '' 
-        });
-
-        res.json({ success: true, message: `Đã kích hoạt lại tài khoản ${user.name || user.email}` });
+        const user = await prisma.user.findUnique({ where: { id } });
+        if (!user) return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+        await prisma.user.update({ where: { id }, data: { isVerified: true } });
+        res.json({ success: true, message: "Đã kích hoạt lại tài khoản" });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

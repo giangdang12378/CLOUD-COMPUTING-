@@ -20,9 +20,13 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
 
   useEffect(() => {
     if (order) {
-      setSelectedStatus(order.status || "");
-      setSelectedPaymentStatus(order.paymentStatus || "");
-      setSelectedPaymentMethod(order.paymentMethod || "");
+      // Neu status la legacy (pending/processing/shipped), default sang delivered de user co the chon
+      const legacyStatus = ["pending", "processing", "shipped"].includes(order.status);
+      setSelectedStatus(legacyStatus ? "delivered" : (order.status || "delivered"));
+      setSelectedPaymentStatus(order.paymentStatus || "pending");
+      // Dropdown chi co cod / bank_transfer, neu don dang payos thi default sang cod (user co the doi)
+      const validMethods = ["cod", "bank_transfer"];
+      setSelectedPaymentMethod(validMethods.includes(order.paymentMethod) ? order.paymentMethod : "cod");
     }
   }, [order]);
 
@@ -47,7 +51,7 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
 
   const getStatusText = (status) => {
     const statusMap = {
-      pending: "Chờ xử lý",
+      pending: "Chờ thanh toán",
       processing: "Đang xử lý",
       shipped: "Đã gửi",
       delivered: "Hoàn thành",
@@ -76,7 +80,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
     { value: "pending", label: "Chờ thanh toán" },
     { value: "paid", label: "Đã thanh toán" },
     { value: "failed", label: "Thất bại" },
-    { value: "refunded", label: "Đã hoàn tiền" },
   ];
 
   const paymentMethods = [
@@ -84,14 +87,39 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
     { value: "bank_transfer", label: "Chuyển khoản" },
   ];
 
+  // Auto-sync UI: chon tien mat -> luon set delivered/paid
+  const handlePaymentMethodChange = (e) => {
+    const newMethod = e.target.value;
+    setSelectedPaymentMethod(newMethod);
+    if (newMethod === "cod") {
+      setSelectedStatus("delivered");
+      setSelectedPaymentStatus("paid");
+    }
+  };
+
+  // Auto-sync UI: khi user chon status -> tu dong set paymentStatus tuong ung
+  const handleStatusChange = (e) => {
+    const newStatus = e.target.value;
+    setSelectedStatus(newStatus);
+    if (newStatus === "delivered") {
+      setSelectedPaymentStatus("paid");
+    } else if (newStatus === "cancelled") {
+      setSelectedPaymentStatus("failed");
+    }
+  };
+
   const handleUpdateStatus = async () => {
     setIsUpdatingStatus(true);
     try {
-      await onUpdateStatus(order._id, {
-        status: selectedStatus,
-        paymentStatus: selectedPaymentStatus,
-        paymentMethod: selectedPaymentMethod,
-      }, statusNote);
+      await onUpdateStatus(
+        order._id,
+        {
+          status: selectedStatus,
+          paymentStatus: selectedPaymentStatus,
+          paymentMethod: selectedPaymentMethod,
+        },
+        statusNote
+      );
       setStatusNote("");
     } catch (error) {
       console.error("Error updating status:", error);
@@ -102,44 +130,31 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
 
   const getImageUrl = (item) => {
     const fallback = `${import.meta.env.VITE_API_URL || ""}/placeholder-product.jpg`;
-
-    // Lấy image từ nhiều nguồn có thể
     const image = item.image || item._doc?.image || item.productId?.image;
-    console.log("Image path:", image); // Debug image path
-
     if (!image) return fallback;
-
-    // Nếu image đã là đường dẫn đầy đủ
     if (image.startsWith("http")) {
       return image;
     }
-
-    // Xử lý đường dẫn image (loại bỏ / ở đầu nếu có và chuyển \ thành /)
     const cleanPath = image.replace(/\\/g, "/").replace(/^\/+/, "");
-    const fullUrl = `${import.meta.env.VITE_API_URL || ""}/${cleanPath}`;
-    console.log("Final image URL:", fullUrl); // Debug final URL
-
-    return fullUrl;
+    return `${import.meta.env.VITE_API_URL || ""}/${cleanPath}`;
   };
 
-  // Function to get product name from various possible sources
   const getProductName = (item) => {
-    // Dữ liệu có thể nằm ở item hoặc item._doc
     return (
-      item.productName || item._doc?.productName || "Sản phẩm không xác định"
+      item.product?.productName ||
+      item.productName ||
+      item._doc?.productName ||
+      "Sản phẩm không xác định"
     );
   };
 
-  // Function to get value from mongoose document
   const getValue = (item, field) => {
     return item[field] ?? item._doc?.[field] ?? 0;
   };
 
-  
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
@@ -155,12 +170,9 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Info */}
             <div className="lg:col-span-2 space-y-6">
-              {/* Status & Basic Info */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">
@@ -189,11 +201,11 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                     </span>
                     <p className="font-medium">
                       {order.paymentMethod === "cod"
-                        ? "Thanh toán khi nhận hàng"
+                        ? "Tiền mặt"
                         : order.paymentMethod === "bank_transfer"
                         ? "Chuyển khoản ngân hàng"
-                        : order.paymentMethod === "e_wallet"
-                        ? "Ví điện tử"
+                        : order.paymentMethod === "payos"
+                        ? "PayOS"
                         : order.paymentMethod}
                     </p>
                   </div>
@@ -208,25 +220,12 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                         ? "Đã thanh toán"
                         : order.paymentStatus === "failed"
                         ? "Thất bại"
-                        : order.paymentStatus === "refunded"
-                        ? "Đã hoàn tiền"
                         : order.paymentStatus}
                     </p>
                   </div>
-                  {order.estimatedDelivery && (
-                    <div>
-                      <span className="text-gray-600">Dự kiến giao:</span>
-                      <p className="font-medium">
-                        {new Date(order.estimatedDelivery).toLocaleDateString(
-                          "vi-VN"
-                        )}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Order Items */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Package className="w-5 h-5 mr-2" />
@@ -235,7 +234,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                 <div className="space-y-3">
                   {order.items?.map((item, index) => {
                     const productName = getProductName(item);
-
                     return (
                       <div
                         key={index}
@@ -250,18 +248,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                           <h4 className="font-medium text-gray-900">
                             {productName}
                           </h4>
-                          {item.variant &&
-                            (item.variant.color || item.variant.size) && (
-                              <p className="text-sm text-gray-600">
-                                {item.variant.color &&
-                                  `Màu: ${item.variant.color}`}
-                                {item.variant.color &&
-                                  item.variant.size &&
-                                  " - "}
-                                {item.variant.size &&
-                                  `Size: ${item.variant.size}`}
-                              </p>
-                            )}
                           <p className="text-sm text-gray-600">
                             Số lượng: {getValue(item, "quantity")}
                           </p>
@@ -278,47 +264,9 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                   })}
                 </div>
               </div>
-
-              {/* Status History */}
-              {order.statusHistory && order.statusHistory.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Lịch sử trạng thái
-                  </h3>
-                  <div className="space-y-3">
-                    {order.statusHistory.map((history, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start p-3 bg-gray-50 rounded-lg"
-                      >
-                        <div className="flex-shrink-0 mr-3">
-                          {getStatusIcon(history.status)}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">
-                            {getStatusText(history.status)}
-                          </p>
-                          {history.note && (
-                            <p className="text-sm text-gray-600">
-                              {history.note}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-500 mt-1">
-                            {new Date(history.timestamp).toLocaleString(
-                              "vi-VN"
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Sidebar */}
             <div className="space-y-6">
-              {/* Customer Info */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <User className="w-5 h-5 mr-2" />
@@ -336,27 +284,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                 </div>
               </div>
 
-              {/* Shipping Address */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  Địa chỉ giao hàng
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <p className="font-medium">
-                    {order.shippingAddress?.fullName}
-                  </p>
-                  <p>{order.shippingAddress?.phone}</p>
-                  <p className="text-gray-600">
-                    {order.shippingAddress?.address},{" "}
-                    {order.shippingAddress?.ward},{" "}
-                    {order.shippingAddress?.district},{" "}
-                    {order.shippingAddress?.city}
-                  </p>
-                </div>
-              </div>
-
-              {/* Order Summary */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <CreditCard className="w-5 h-5 mr-2" />
@@ -366,33 +293,20 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                   <div className="flex justify-between">
                     <span>Tạm tính:</span>
                     <span>
-                      {(typeof order.totalAmount === "number"
-                        ? order.totalAmount
-                        : 0
-                      ).toLocaleString("vi-VN")}
-                      đ
+                      {Number(order.totalAmount || 0).toLocaleString("vi-VN")}đ
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Phí vận chuyển:</span>
                     <span>
-                      {(typeof order.shippingFee === "number"
-                        ? order.shippingFee
-                        : 0
-                      ).toLocaleString("vi-VN")}
-                      đ
+                      {Number(order.shippingFee || 0).toLocaleString("vi-VN")}đ
                     </span>
                   </div>
-                  {order.discountAmount > 0 && (
+                  {Number(order.discountAmount) > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Giảm giá:</span>
                       <span>
-                        -
-                        {(typeof order.discountAmount === "number"
-                          ? order.discountAmount
-                          : 0
-                        ).toLocaleString("vi-VN")}
-                        đ
+                        -{Number(order.discountAmount).toLocaleString("vi-VN")}đ
                       </span>
                     </div>
                   )}
@@ -400,31 +314,26 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                     <div className="flex justify-between font-semibold text-lg">
                       <span>Tổng cộng:</span>
                       <span>
-                        {typeof order.finalAmount === "number"
-                          ? order.finalAmount.toLocaleString("vi-VN")
-                          : "0"}
-                        đ
+                        {Number(order.finalAmount || 0).toLocaleString("vi-VN")}đ
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Update Order Panel */}
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-100 shadow-sm mt-6">
                 <h3 className="text-lg font-bold text-blue-900 mb-4 flex items-center">
                   <Package className="w-5 h-5 mr-2 text-blue-600" />
                   Cập nhật đơn hàng
                 </h3>
                 <div className="space-y-4 font-sans">
-                  {/* Select 1: Order Status */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       TRẠNG THÁI ĐƠN HÀNG
                     </label>
                     <select
                       value={selectedStatus}
-                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      onChange={handleStatusChange}
                       className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-800 text-sm"
                     >
                       {availableStatuses.map((status) => (
@@ -435,7 +344,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                     </select>
                   </div>
 
-                  {/* Select 2: Payment Status */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       TRẠNG THÁI THANH TOÁN
@@ -453,14 +361,13 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                     </select>
                   </div>
 
-                  {/* Select 3: Payment Method */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       PHƯƠNG THỨC THANH TOÁN
                     </label>
                     <select
                       value={selectedPaymentMethod}
-                      onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                      onChange={handlePaymentMethodChange}
                       className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-800 text-sm"
                     >
                       {paymentMethods.map((method) => (
@@ -469,9 +376,13 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                         </option>
                       ))}
                     </select>
+                    {selectedPaymentMethod === "cod" && (
+                      <p className="text-xs text-blue-700 mt-1 italic">
+                        Tiền mặt: đơn hàng tự động chuyển sang Hoàn thành + Đã thanh toán
+                      </p>
+                    )}
                   </div>
 
-                  {/* Note input */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       GHI CHÚ CẬP NHẬT
@@ -495,9 +406,6 @@ const OrderDetailModal = ({ order, onClose, onUpdateStatus }) => {
                 </div>
               </div>
 
-
-
-              {/* Notes */}
               {order.notes && (
                 <div className="bg-yellow-50 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">

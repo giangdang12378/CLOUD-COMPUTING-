@@ -32,7 +32,7 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!user.isVerified) {
+  if (!user || !user.isVerified) {
     return <Navigate to="/verify-email" replace />;
   }
 
@@ -47,7 +47,7 @@ const AdminProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!user.isVerified) {
+  if (!user || !user.isVerified) {
     return <Navigate to="/verify-email" replace />;
   }
 
@@ -67,7 +67,7 @@ const SuperAdminProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!user.isVerified) {
+  if (!user || !user.isVerified) {
     return <Navigate to="/verify-email" replace />;
   }
 
@@ -82,7 +82,7 @@ const SuperAdminProtectedRoute = ({ children }) => {
 const RedirectAuthenticatedUser = ({ children }) => {
   const { isAuthenticated, user } = useAuthStore();
 
-  if (isAuthenticated && user.isVerified) {
+  if (isAuthenticated && user && user.isVerified) {
     // Redirect based on user role
     if (user.role === "super_admin") {
       return <Navigate to="/super-admin/tenants" replace />;

@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma.js';
-import { sendInvoiceEmail } from '../mailtrap/emails.js';
+import { sendInvoiceEmail } from '../email/emails.js';
 import payos from '../utils/payos.js';
 
 const genOrderNumber = () => 'ORD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);

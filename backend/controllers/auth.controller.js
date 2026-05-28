@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma.js';
-import { sendVerificationEmail } from '../mailtrap/emails.js';
+import { sendVerificationEmail } from '../email/emails.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 

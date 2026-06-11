@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Discount {
+  id            String    @id
+  tenantId      String
+  code          String    @unique
+  description   String?
+  discountType  String
+  discountValue Decimal?
+  minOrderValue Decimal?
+  startDate     DateTime?
+  endDate       DateTime?
+  usageLimit    Int?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  Tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Order {
+  id             String      @id
+  tenantId       String
+  orderNumber    String      @unique
+  customerInfo   Json?
+  totalAmount    Decimal
+  shippingFee    Decimal     @default(0)
+  discountAmount Decimal     @default(0)
+  finalAmount    Decimal
+  status         String      @default("pending")
+  paymentStatus  String      @default("pending")
+  paymentMethod  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime
+  Tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  OrderItem      OrderItem[]
+  Payment        Payment[]
+
+  @@index([tenantId])
+}
+
+model OrderItem {
+  id        String  @id
+  orderId   String
+  productId String
+  quantity  Int
+  price     Decimal
+  Order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  Product   Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model Payment {
+  id            String   @id
+  tenantId      String
+  orderId       String?
+  amount        Decimal
+  paymentMethod String?
+  status        String   @default("pending")
+  transactionId String?
+  createdAt     DateTime @default(now())
+  Order         Order?   @relation(fields: [orderId], references: [id])
+  Tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Product {
+  id          String      @id
+  tenantId    String
+  productName String
+  price       Decimal
+  description String?
+  image       String?
+  inventory   Int         @default(0)
+  category    String?
+  status      String      @default("available")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime
+  OrderItem   OrderItem[]
+  Tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Tenant {
+  id        String     @id
+  name      String
+  domain    String?    @unique
+  email     String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime
+  Discount  Discount[]
+  Order     Order[]
+  Payment   Payment[]
+  Product   Product[]
+  User      User[]
+}
+
+model User {
+  id                   String    @id
+  tenantId             String
+  name                 String
+  email                String    @unique
+  password             String
+  role                 String
+  isVerified           Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime
+  lastLogin            DateTime?
+  resetPasswordExpires DateTime?
+  resetPasswordToken   String?
+  verificationToken    String?
+  Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([tenantId])
+}
